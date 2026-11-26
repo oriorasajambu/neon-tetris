@@ -26,6 +26,8 @@ jobs:
           CREATED_REF: ${{ github.event.ref }}
           CREATED_REF_TYPE: ${{ github.event.ref_type }}
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
@@ -72,6 +74,12 @@ jobs:
           fi
 
           validate_branch_name "$HEAD_REF"
+
+          if [[ ("$HEAD_REF" == "rc" || "$HEAD_REF" == "dev") && "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+            echo "::error title=Invalid promotion source::Reserved promotion branches must originate from this repository."
+            printf 'Promotion branch `%s` must originate from `%s`, not `%s`.\n' "$HEAD_REF" "$REPOSITORY" "$HEAD_REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
           allowed_flow=false
           case "$HEAD_REF" in
