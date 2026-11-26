@@ -13,6 +13,40 @@ const ACTION_LABELS = {
     mute: 'Mute Audio'
 };
 
+const MODE_OBJECTIVES = {
+    marathon: 'Survive endless escalating gravity and chase high scores.',
+    sprint: 'Clear 40 lines as fast as possible. Timer starts on first input.',
+    ultra: 'Score as many points as possible within 2 minutes.',
+    cheese: 'Dig through 18 garbage lines to reach the bottom.',
+    zen: 'Relaxed endless practice with automatic top-out recovery.',
+    vs_ai: 'Battle a real-time heuristic AI with garbage attacks.'
+};
+
+const LEGEND_ACTIONS = [
+    ['Move', ['left', 'right']],
+    ['Soft / Hard', ['softDrop', 'hardDrop']],
+    ['Rotate', ['rotateCCW', 'rotateCW', 'rotate180']],
+    ['Hold', ['hold']]
+];
+
+function formatKeyCode(code) {
+    if (!code) return '?';
+    const map = {
+        ArrowLeft: '←',
+        ArrowRight: '→',
+        ArrowDown: '↓',
+        ArrowUp: '↑',
+        Space: 'SPACE',
+        ShiftLeft: 'SHIFT',
+        ShiftRight: 'R-SHIFT',
+        Escape: 'ESC'
+    };
+    if (map[code]) return map[code];
+    if (code.startsWith('Key')) return code.slice(3);
+    if (code.startsWith('Digit')) return code.slice(5);
+    return code;
+}
+
 export function formatTimeMs(ms) {
     const clamped = Math.max(0, ms);
     const totalSec = Math.floor(clamped / 1000);
@@ -57,6 +91,13 @@ export class UIManager {
             holdCanvas: document.getElementById('hold-canvas'),
             nextContainer: document.getElementById('next-queue'),
             menuHighScore: document.getElementById('menu-highscore'),
+            modePill: document.getElementById('hud-mode-pill'),
+            modeObjective: document.getElementById('mode-objective'),
+            controlsLegendList: document.getElementById('controls-legend-list'),
+            sessionPb: document.getElementById('session-pb'),
+            sessionPace: document.getElementById('session-pace'),
+            sessionProgressFill: document.getElementById('session-progress-fill'),
+            modalBackdrop: document.getElementById('modal-backdrop'),
             countdownText: document.getElementById('countdown-text'),
             replayBar: document.getElementById('replay-bar'),
             replaySpeedBtn: document.getElementById('btn-replay-speed'),
@@ -103,7 +144,10 @@ export class UIManager {
                 document.querySelectorAll('#mode-selector .mode-btn').forEach((b) => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.selectedMode = btn.dataset.mode;
+                this.hud.modePill.textContent = btn.textContent.toUpperCase();
+                this.hud.modeObjective.textContent = MODE_OBJECTIVES[this.selectedMode] || '';
                 document.getElementById('ai-tier-selector').classList.toggle('hidden', this.selectedMode !== 'vs_ai');
+                this.updateSessionPanel(null, this.selectedMode);
                 this.audio.init();
                 this.audio.play('menuSelect');
             });
@@ -145,7 +189,14 @@ export class UIManager {
 
         document.getElementById('btn-stats-back').addEventListener('click', () => {
             this.audio.play('menuSelect');
-            this.showOverlay('menu');
+            this.showOverlay(this.returnOverlay || 'menu');
+        });
+
+        this.hud.modalBackdrop.addEventListener('click', (e) => {
+            if (e.target === this.hud.modalBackdrop) {
+                this.input.cancelListening();
+                this.showOverlay(this.returnOverlay || 'menu');
+            }
         });
 
         // Pause menu
@@ -269,13 +320,107 @@ export class UIManager {
     }
 
     showOverlay(name) {
+        const isModal = name === 'settings' || name === 'stats';
+        this.hud.modalBackdrop.classList.toggle('hidden', !isModal);
         Object.entries(this.overlays).forEach(([key, el]) => {
             el.classList.toggle('hidden', key !== name);
         });
     }
 
     hideAllOverlays() {
+        this.hud.modalBackdrop.classList.add('hidden');
         Object.values(this.overlays).forEach((el) => el.classList.add('hidden'));
+    }
+
+    renderControlsLegend(keybindings) {
+        const list = this.hud.controlsLegendList;
+        if (!list) return;
+        list.innerHTML = '';
+        for (const [label, actions] of LEGEND_ACTIONS) {
+            const row = document.createElement('div');
+            row.className = 'legend-row';
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = label;
+            const keysSpan = document.createElement('span');
+            keysSpan.style.display = 'flex';
+            keysSpan.style.gap = '3px';
+            for (const act of actions) {
+                const code = (keybindings[act] && keybindings[act][0]) || '';
+                const kbd = document.createElement('kbd');
+                kbd.className = 'keycap';
+                kbd.textContent = formatKeyCode(code);
+                keysSpan.appendChild(kbd);
+            }
+            row.appendChild(titleSpan);
+            row.appendChild(keysSpan);
+            list.appendChild(row);
+        }
+    }
+
+    ensureNextSlots(count) {
+        const container = this.hud.nextContainer;
+        while (container.children.length < count) {
+            const c = document.createElement('canvas');
+            c.width = 110;
+            c.height = 64;
+            c.className = 'preview-canvas';
+            container.appendChild(c);
+        }
+        while (container.children.length > count) {
+            container.removeChild(container.lastChild);
+        }
+    }
+
+    updateSessionPanel(engine, mode = this.selectedMode) {
+        const records = this.storage.loadModeRecords();
+        const scores = this.storage.loadHighScores();
+        const marathonPb = scores.length > 0 ? scores[0].score : 0;
+
+        let pbText = '--';
+        let paceText = '--';
+        let progressPct = 0;
+
+        if (mode === 'sprint') {
+            pbText = records.sprintBestMs !== null ? formatTimeMs(records.sprintBestMs) : '--';
+            if (engine && engine.lines > 0) {
+                progressPct = Math.min(100, (engine.lines / SPRINT_TARGET_LINES) * 100);
+                if (records.sprintBestMs !== null && engine.elapsedFrames > 0) {
+                    const currentMs = engine.elapsedFrames * FRAME_DURATION;
+                    const projectedMs = (currentMs / engine.lines) * SPRINT_TARGET_LINES;
+                    const deltaSec = (projectedMs - records.sprintBestMs) / 1000;
+                    paceText = `${deltaSec >= 0 ? '+' : ''}${deltaSec.toFixed(1)}s`;
+                } else {
+                    paceText = `${engine.lines}/${SPRINT_TARGET_LINES}L`;
+                }
+            }
+        } else if (mode === 'ultra') {
+            pbText = records.ultraBestScore > 0 ? records.ultraBestScore.toLocaleString() : '--';
+            if (engine) {
+                progressPct = Math.min(100, (engine.elapsedFrames / ULTRA_DURATION_FRAMES) * 100);
+                paceText = records.ultraBestScore > 0
+                    ? `${Math.round((engine.score / records.ultraBestScore) * 100)}% PB`
+                    : `${engine.score.toLocaleString()}`;
+            }
+        } else if (mode === 'cheese') {
+            pbText = records.cheeseBestMs !== null ? formatTimeMs(records.cheeseBestMs) : '--';
+            if (engine) {
+                progressPct = Math.min(100, (engine.cheeseCleared / CHEESE_TARGET_LINES) * 100);
+                paceText = `${engine.cheeseCleared}/${CHEESE_TARGET_LINES}L`;
+            }
+        } else if (mode === 'vs_ai') {
+            pbText = `${records.vsAiWins} Wins`;
+            paceText = engine ? `${engine.attackSent} ATK` : '--';
+        } else {
+            pbText = marathonPb > 0 ? marathonPb.toLocaleString() : '--';
+            if (engine && marathonPb > 0) {
+                progressPct = Math.min(100, (engine.score / marathonPb) * 100);
+                paceText = `${Math.round(progressPct)}% PB`;
+            }
+        }
+
+        this.hud.sessionPb.textContent = pbText;
+        this.hud.sessionPace.textContent = paceText;
+        this.hud.sessionProgressFill.style.width = `${progressPct}%`;
     }
 
     updateMenuHighScore() {
@@ -471,20 +616,13 @@ export class UIManager {
         renderer.renderPreview(this.hud.holdCanvas, engine.holdType);
 
         const queue = engine.getNextQueue();
+        this.ensureNextSlots(queue.length);
         const container = this.hud.nextContainer;
-        while (container.children.length < queue.length) {
-            const c = document.createElement('canvas');
-            c.width = 96;
-            c.height = 60;
-            c.className = 'preview-canvas';
-            container.appendChild(c);
-        }
-        while (container.children.length > queue.length) {
-            container.removeChild(container.lastChild);
-        }
         for (let i = 0; i < queue.length; i++) {
             renderer.renderPreview(container.children[i], queue[i]);
         }
+
+        this.updateSessionPanel(engine, engine.mode);
     }
 
     showGameOver({ score, level, lines, victory, isNewHigh, onSaveReplay }) {

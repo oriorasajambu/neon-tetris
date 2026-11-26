@@ -192,10 +192,13 @@ document.addEventListener('DOMContentLoaded', () => {
         boardChanged: () => renderer.drawLockedBoard(engine.board),
         hudChanged: () => {
             ui.updateHUD(engine, renderer);
+            const danger = engine.board.getStackHeight() >= 16;
+            const hue = danger ? 348 : (178 + (engine.level - 1) * 14) % 360;
+            document.documentElement.style.setProperty('--level-hue', String(hue));
             audio.updateMusicState({
                 level: engine.level,
                 b2b: engine.b2bActive,
-                danger: engine.board.getStackHeight() >= 16
+                danger
             });
         },
         sound: (evt) => audio.play(evt),
@@ -440,6 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
             engine.areFrames = updated.areFrames;
             engine.lineClearFrames = updated.lineClearFrames;
             engine.nextCount = updated.nextCount;
+            ui.renderControlsLegend(updated.keybindings);
+            ui.ensureNextSlots(updated.nextCount);
             ui.updateHUD(engine, renderer);
         },
         onWatchReplay: (slot) => {
@@ -568,20 +573,31 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateCanvasScale() {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        let cellSize = 30;
-        let oppCellSize = 24;
+        const isMobile = vw < 768;
+        const isDual = activeMode === GAME_MODES.VS_AI || Boolean(ghostPlayer);
+        const isDualDesktop = isDual && vw >= 1200;
 
-        if (vw < 768) {
-            cellSize = Math.floor(Math.min((vw - 32) / COLS, (vh * 0.56) / VISIBLE_ROWS));
-            cellSize = Math.max(16, Math.min(26, cellSize));
-            oppCellSize = 9; // Compact PiP mini-board on mobile
-        } else if (vw < 1024) {
-            cellSize = 24;
-            oppCellSize = 14;
-        } else if (activeMode === GAME_MODES.VS_AI || ghostPlayer) {
-            cellSize = 26;
-            oppCellSize = 24;
-        }
+        const targetH = isMobile ? vh * 0.54 : vh * 0.84;
+        const maxByHeight = Math.floor(targetH / VISIBLE_ROWS);
+
+        const wingCols = isMobile ? 0 : 11.5;
+        const boardCols = isDualDesktop ? COLS * 2 + 2 : COLS;
+        const maxByWidth = Math.floor((vw - 48) / (boardCols + wingCols));
+
+        const cellSize = Math.max(16, Math.min(64, Math.min(maxByHeight, maxByWidth)));
+        const boardH = cellSize * VISIBLE_ROWS;
+        const boardW = cellSize * COLS;
+        const wingW = Math.max(148, Math.round(cellSize * 5.2));
+        const oppCellSize = isDualDesktop ? cellSize : (isMobile ? 9 : 14);
+
+        const rootStyle = document.documentElement.style;
+        rootStyle.setProperty('--board-h', `${boardH}px`);
+        rootStyle.setProperty('--board-w', `${boardW}px`);
+        rootStyle.setProperty('--cell-size', `${cellSize}px`);
+        rootStyle.setProperty('--wing-w', `${wingW}px`);
+
+        document.querySelector('.game-shell').classList.toggle('dual-desktop', isDualDesktop);
+        ui.hud.playLayout.classList.toggle('dual-desktop', isDualDesktop);
 
         renderer.resize(cellSize);
         renderer.drawLockedBoard(engine.board);
@@ -589,11 +605,56 @@ document.addEventListener('DOMContentLoaded', () => {
         oppRenderer.drawLockedBoard(oppEngine.board);
     }
 
+    // Lightweight 30-particle atmospheric background loop
+    const ambientCanvas = document.getElementById('ambient-bg');
+    const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (ambientCanvas && !reducedMotion) {
+        const actx = ambientCanvas.getContext('2d');
+        const dots = Array.from({ length: 30 }, () => ({
+            x: Math.random(),
+            y: Math.random(),
+            r: 1 + Math.random() * 1.8,
+            vy: -0.00025 - Math.random() * 0.00045,
+            a: 0.12 + Math.random() * 0.25
+        }));
+        const resizeAmbient = () => {
+            ambientCanvas.width = window.innerWidth;
+            ambientCanvas.height = window.innerHeight;
+        };
+        resizeAmbient();
+        window.addEventListener('resize', resizeAmbient);
+
+        const tickAmbient = () => {
+            const w = ambientCanvas.width;
+            const h = ambientCanvas.height;
+            actx.clearRect(0, 0, w, h);
+            const hue = getComputedStyle(document.documentElement).getPropertyValue('--level-hue').trim() || '178';
+            actx.fillStyle = `hsl(${hue}, 100%, 65%)`;
+            for (let i = 0; i < dots.length; i++) {
+                const d = dots[i];
+                d.y += d.vy;
+                if (d.y < -0.02) {
+                    d.y = 1.02;
+                    d.x = Math.random();
+                }
+                actx.globalAlpha = d.a;
+                actx.beginPath();
+                actx.arc(d.x * w, d.y * h, d.r, 0, Math.PI * 2);
+                actx.fill();
+            }
+            requestAnimationFrame(tickAmbient);
+        };
+        requestAnimationFrame(tickAmbient);
+    }
+
     window.addEventListener('resize', updateCanvasScale);
 
     input.attach();
     input.bindTouchButtons(document.getElementById('touch-controls'));
     updateCanvasScale();
+    ui.renderControlsLegend(settings.keybindings);
+    ui.ensureNextSlots(settings.nextCount);
+    ui.updateSessionPanel(null, ui.selectedMode);
     ui.updateMenuHighScore();
     ui.updateMuteButton(settings.muted);
     ui.showOverlay('menu');
