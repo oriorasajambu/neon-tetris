@@ -17,7 +17,8 @@ export default [
                 URL: "readonly",
                 FileReader: "readonly",
                 alert: "readonly",
-                confirm: "readonly"
+                confirm: "readonly",
+                structuredClone: "readonly"
             }
         },
         rules: {
