@@ -1,0 +1,293 @@
+name: CI
+
+on:
+  create:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-validation:
+    name: branch-validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name and promotion flow
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          CREATED_REF: ${{ github.event.ref }}
+          CREATED_REF_TYPE: ${{ github.event.ref_type }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          validate_branch_name() {
+            local branch="$1"
+            case "$branch" in
+              main|rc|dev)
+                return 0
+                ;;
+            esac
+
+            if [[ "$branch" =~ ^(feature|bug|chore|docs|refactor|hotfix)/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+              return 0
+            fi
+
+            echo "::error title=Invalid branch name::Use feature/<kebab-case>, bug/<kebab-case>, chore/<kebab-case>, docs/<kebab-case>, refactor/<kebab-case>, or hotfix/<kebab-case> (lowercase letters, digits, and single hyphens). Reserved branches: main, rc, dev."
+            printf 'Rejected branch: `%s`\n' "$branch" >> "$GITHUB_STEP_SUMMARY"
+            return 1
+          }
+
+          if [[ "$EVENT_NAME" == "merge_group" ]]; then
+            echo "Merge-queue branch flow was validated on the originating pull request."
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "create" ]]; then
+            if [[ "$CREATED_REF_TYPE" == "branch" ]]; then
+              validate_branch_name "$CREATED_REF"
+            fi
+            exit $?
+          fi
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ "$REF_TYPE" == "branch" ]]; then
+              validate_branch_name "$REF_NAME"
+            fi
+            exit $?
+          fi
+
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "::error title=Unsupported event::Branch validation received an unexpected event."
+            exit 1
+          fi
+
+          validate_branch_name "$HEAD_REF"
+
+          allowed_flow=false
+          case "$HEAD_REF" in
+            rc)
+              [[ "$BASE_REF" == "main" ]] && allowed_flow=true
+              ;;
+            dev)
+              [[ "$BASE_REF" == "rc" ]] && allowed_flow=true
+              ;;
+            hotfix/*)
+              [[ "$BASE_REF" == "rc" || "$BASE_REF" == "main" ]] && allowed_flow=true
+              ;;
+            feature/*|bug/*|chore/*|docs/*|refactor/*)
+              [[ "$BASE_REF" == "rc" || "$BASE_REF" == "dev" ]] && allowed_flow=true
+              ;;
+          esac
+
+          if [[ "$allowed_flow" != "true" ]]; then
+            echo "::error title=Invalid pull request target::Allowed flows: rc -> main; dev -> rc; feature/bug/chore/docs/refactor -> rc or dev; hotfix -> rc or main."
+            printf 'Pull request from `%s` to `%s` is not an allowed promotion.\n' "$HEAD_REF" "$BASE_REF" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Branch name and pull request promotion flow are valid."
+
+  changes-filter:
+    name: changes-filter
+    needs: branch-validation
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'rc' || github.ref_name == 'dev'))
+    runs-on: ubuntu-latest
+    outputs:
+      code_changed: ${{ steps.filter.outputs.code_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MERGE_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+
+          case "$EVENT_NAME" in
+            pull_request)
+              base_sha="$PR_BASE_SHA"
+              head_sha="$PR_HEAD_SHA"
+              ;;
+            merge_group)
+              base_sha="$MERGE_BASE_SHA"
+              head_sha="$MERGE_HEAD_SHA"
+              ;;
+            push)
+              base_sha="$BEFORE_SHA"
+              head_sha="$PUSH_SHA"
+              ;;
+            *)
+              echo "::error title=Unsupported event::Cannot classify changed paths for this event."
+              exit 1
+              ;;
+          esac
+
+          if [[ -z "$base_sha" || -z "$head_sha" || "$base_sha" =~ ^0+$ ]]; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            echo "No prior commit is available; running all code/config checks."
+            exit 0
+          fi
+
+          if ! git cat-file -e "${base_sha}^{commit}" || ! git cat-file -e "${head_sha}^{commit}"; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            echo "A comparison commit is unavailable; running all code/config checks."
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$(git merge-base "$base_sha" "$head_sha")"
+          fi
+
+          changed_files="$RUNNER_TEMP/changed-files"
+          git diff --name-only -z "$base_sha" "$head_sha" > "$changed_files"
+
+          code_changed=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              *.md|docs/*|LICENSE)
+                ;;
+              *)
+                code_changed=true
+                break
+                ;;
+            esac
+          done < "$changed_files"
+
+          echo "code_changed=$code_changed" >> "$GITHUB_OUTPUT"
+          if [[ "$code_changed" == "true" ]]; then
+            echo "Code/config paths changed; lint, tests, and Pages packaging will run."
+          else
+            echo "Docs-only change; heavy checks and deployment will be skipped."
+          fi
+
+  test-and-package:
+    name: test-and-package
+    needs: changes-filter
+    if: needs.changes-filter.outputs.code_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      - name: Verify static site files
+        run: |
+          set -euo pipefail
+          test -s index.html
+          test -s styles.css
+          test -s js/main.js
+          test -s js/ai-worker.js
+          echo "Static site entry point and referenced assets are present."
+
+      - name: Prepare Pages artifact
+        run: |
+          set -euo pipefail
+          site_dir="$RUNNER_TEMP/site"
+          mkdir -p "$site_dir/js"
+          cp index.html styles.css "$site_dir/"
+          cp -R js/. "$site_dir/js/"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/site
+
+  required:
+    name: required
+    needs: [branch-validation, changes-filter, test-and-package]
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'rc' || github.ref_name == 'dev')))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate required checks
+        env:
+          BRANCH_RESULT: ${{ needs.branch-validation.result }}
+          FILTER_RESULT: ${{ needs.changes-filter.result }}
+          TEST_RESULT: ${{ needs.test-and-package.result }}
+          CODE_CHANGED: ${{ needs.changes-filter.outputs.code_changed }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BRANCH_RESULT" != "success" ]]; then
+            echo "::error title=Required check failed::Branch validation or promotion-flow validation did not succeed."
+            exit 1
+          fi
+
+          if [[ "$FILTER_RESULT" != "success" ]]; then
+            echo "::error title=Required check failed::Changed-path detection did not succeed."
+            exit 1
+          fi
+
+          if [[ "$CODE_CHANGED" == "true" && "$TEST_RESULT" != "success" ]]; then
+            echo "::error title=Required check failed::Code/config checks and Pages packaging must pass."
+            exit 1
+          fi
+
+          if [[ "$CODE_CHANGED" == "false" && "$TEST_RESULT" != "skipped" ]]; then
+            echo "::error title=Required check failed::Docs-only changes must skip the heavy checks."
+            exit 1
+          fi
+
+          echo "All required checks passed."
+
+  deploy-pages:
+    name: deploy-pages
+    needs: [changes-filter, test-and-package, required]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes-filter.outputs.code_changed == 'true' &&
+      needs.test-and-package.result == 'success' &&
+      needs.required.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

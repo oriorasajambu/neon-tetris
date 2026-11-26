@@ -43,5 +43,23 @@ Then open `http://localhost:8000`.
 npm test
 ```
 
+## Contributing and Release Flow
+
+Name working branches with a lowercase kebab-case description:
+
+```text
+feature/add-audio-controls
+bug/fix-replay-loading
+chore/update-eslint
+docs/clarify-controls
+refactor/split-renderer
+hotfix/fix-release-crash
+```
+
+Use `rc` as the release candidate branch. Feature, bug, chore, docs, and refactor branches target `rc` (or `dev` if that optional integration branch is created); `dev` promotes only to `rc`; and `rc` promotes to `main`. Hotfix branches may target `rc` or `main`. Direct pushes to protected release branches are not part of the release flow.
+
 ## GitHub Pages Deployment
-Push to `main`. The `.github/workflows/deploy.yml` workflow runs ESLint, executes the Node.js unit test suite, and deploys the repository root to GitHub Pages.
+
+The GitHub Actions workflow validates branch names and pull request targets, then runs ESLint, the Node.js test suite, and static-site packaging checks for code/config changes. Markdown, `docs/**`, and `LICENSE`-only changes skip the heavy checks while still producing the required successful status. Merge queues are supported on `rc` and `main`.
+
+Code/config changes deploy the static app assets to GitHub Pages only after the required checks pass on `main`. Docs-only merges do not redeploy the unchanged site. GitHub Pages must be configured to use GitHub Actions.
