@@ -36,30 +36,59 @@
                         <span class="panel-title">LINES</span>
                         <span id="hud-lines" class="stat-val">0</span>
                     </div>
+                    <div class="stat-item">
+                        <span class="panel-title">TIME</span>
+                        <span id="hud-time" class="stat-val mono">0:00.0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="panel-title">PPS</span>
+                        <span id="hud-pps" class="stat-val mono">0.00</span>
+                    </div>
+                    <div id="hud-badges" class="hud-badges">
+                        <span id="badge-b2b" class="badge hidden">B2B</span>
+                        <span id="badge-combo" class="badge hidden">0x</span>
+                    </div>
                 </div>
             </aside>
 
-            <!-- Center Playfield: 3-Layer Canvas Stack -->
+            <!-- Center Playfield: 3-Layer Canvas Stack + Garbage Meter -->
             <section class="board-stage">
-                <div id="board-wrapper" class="board-wrapper">
-                    <canvas id="canvas-bg" class="board-layer"></canvas>
-                    <canvas id="canvas-locked" class="board-layer"></canvas>
-                    <canvas id="canvas-active" class="board-layer"></canvas>
-
-                    <!-- Overlays -->
-                    <div id="overlay-menu" class="overlay">
-                        <div class="overlay-top-icons">
-                            <button id="btn-open-stats" class="icon-btn" title="Stats & Replays">🏆</button>
-                            <button id="btn-open-settings" class="icon-btn" title="Settings">⚙️</button>
-                        </div>
-                        <h1 class="neon-title">NEON<br>TETRIS</h1>
-                        <div class="high-score-banner">
-                            <span>HIGH SCORE</span>
-                            <strong id="menu-highscore">0</strong>
-                        </div>
-                        <button id="btn-start" class="btn-primary pulse-btn">PRESS START</button>
-                        <p class="hint-text">Arrows / WASD • Space Hard Drop • Z/X Rotate • C Hold</p>
+                <div class="board-with-meter">
+                    <div id="player-garbage-meter" class="garbage-meter hidden">
+                        <div id="player-garbage-fill" class="garbage-fill"></div>
                     </div>
+                    <div id="board-wrapper" class="board-wrapper">
+                        <canvas id="canvas-bg" class="board-layer"></canvas>
+                        <canvas id="canvas-locked" class="board-layer"></canvas>
+                        <canvas id="canvas-active" class="board-layer"></canvas>
+
+                        <!-- Overlays -->
+                        <div id="overlay-menu" class="overlay">
+                            <div class="overlay-top-icons">
+                                <button id="btn-open-stats" class="icon-btn" title="Stats & Replays">🏆</button>
+                                <button id="btn-open-settings" class="icon-btn" title="Settings">⚙️</button>
+                            </div>
+                            <h1 class="neon-title">NEON<br>TETRIS</h1>
+                            <div class="mode-selector" id="mode-selector">
+                                <button class="mode-btn active" data-mode="marathon">Marathon</button>
+                                <button class="mode-btn" data-mode="sprint">40L Sprint</button>
+                                <button class="mode-btn" data-mode="ultra">2M Ultra</button>
+                                <button class="mode-btn" data-mode="cheese">Cheese 18L</button>
+                                <button class="mode-btn" data-mode="zen">Zen</button>
+                                <button class="mode-btn" data-mode="vs_ai">VS AI</button>
+                            </div>
+                            <div id="ai-tier-selector" class="ai-tier-selector hidden">
+                                <button class="tier-btn" data-tier="chill">Chill</button>
+                                <button class="tier-btn active" data-tier="rival">Rival</button>
+                                <button class="tier-btn" data-tier="cybernetic">Cyber</button>
+                            </div>
+                            <div class="high-score-banner">
+                                <span>HIGH SCORE</span>
+                                <strong id="menu-highscore">0</strong>
+                            </div>
+                            <button id="btn-start" class="btn-primary pulse-btn">PRESS START</button>
+                            <p class="hint-text">Arrows/WASD • Space Drop • Z/X/Q Rotate • C Hold</p>
+                        </div>
 
                     <div id="overlay-pause" class="overlay hidden">
                         <h2 class="overlay-heading">PAUSED</h2>
@@ -102,16 +131,41 @@
                             <label>ARR (Repeat Rate): <span id="setting-arr-val">10 ms</span>
                                 <input id="setting-arr" type="range" min="0" max="300" step="1">
                             </label>
-                            <label>Volume: <span id="setting-volume-val">70%</span>
+                            <label>SDF (Soft Drop Factor): <span id="setting-sdf-val">20x</span>
+                                <input id="setting-sdf" type="range" min="1" max="21" step="1">
+                            </label>
+                            <label>ARE (Spawn Delay): <span id="setting-are-val">0 f</span>
+                                <input id="setting-are" type="range" min="0" max="24" step="1">
+                            </label>
+                            <label>Line Clear Delay: <span id="setting-lcd-val">24 f</span>
+                                <input id="setting-lcd" type="range" min="0" max="24" step="1">
+                            </label>
+                            <label>SFX Volume: <span id="setting-volume-val">70%</span>
                                 <input id="setting-volume" type="range" min="0" max="100" step="1">
                             </label>
+                            <label>Music Volume: <span id="setting-music-vol-val">45%</span>
+                                <input id="setting-music-vol" type="range" min="0" max="100" step="1">
+                            </label>
                             <label class="toggle-row">
-                                <span>Mute Audio</span>
+                                <span>Synthwave Music</span>
+                                <input id="setting-music" type="checkbox">
+                            </label>
+                            <label class="toggle-row">
+                                <span>Mute All Audio</span>
                                 <input id="setting-muted" type="checkbox">
                             </label>
                             <label class="toggle-row">
                                 <span>Colorblind Patterns</span>
                                 <input id="setting-colorblind" type="checkbox">
+                            </label>
+                            <label class="toggle-row">
+                                <span>Theme Palette</span>
+                                <select id="setting-theme">
+                                    <option value="cyberpunk">Neon Cyberpunk</option>
+                                    <option value="synthwave">Synthwave Sunset</option>
+                                    <option value="matrix">Matrix Terminal</option>
+                                    <option value="monochrome">High-Contrast Mono</option>
+                                </select>
                             </label>
                             <label class="toggle-row">
                                 <span>Next Pieces</span>
@@ -151,12 +205,17 @@
                             <div><span>T-Spins</span><strong id="stat-tspins">0</strong></div>
                             <div><span>Best</span><strong id="stat-best">0</strong></div>
                             <div><span>Time</span><strong id="stat-time">0m 0s</strong></div>
+                            <div><span>40L PB</span><strong id="stat-sprint">--</strong></div>
+                            <div><span>Ultra PB</span><strong id="stat-ultra">0</strong></div>
+                            <div><span>Cheese PB</span><strong id="stat-cheese">--</strong></div>
+                            <div><span>AI Wins</span><strong id="stat-ai-wins">0</strong></div>
                         </div>
                         <h4>TOP 10 HIGH SCORES</h4>
                         <div id="highscore-list" class="hs-list"></div>
                         <h4>SAVED REPLAYS</h4>
                         <div id="replay-list" class="replay-list"></div>
                     </div>
+                </div>
                 </div>
 
                 <!-- Replay Playback Bar -->
@@ -175,6 +234,24 @@
                     <div id="next-queue" class="next-queue"></div>
                 </div>
             </aside>
+
+            <!-- Opponent / Ghost Stage (VS AI & Ghost Race) -->
+            <section id="opp-stage" class="opp-stage hidden">
+                <div class="opp-header">
+                    <span id="opp-label" class="panel-title">AI: RIVAL</span>
+                    <span id="opp-stats" class="mono">0L • 0.00 PPS</span>
+                </div>
+                <div class="board-with-meter">
+                    <div id="opp-garbage-meter" class="garbage-meter hidden">
+                        <div id="opp-garbage-fill" class="garbage-fill"></div>
+                    </div>
+                    <div id="opp-board-wrapper" class="board-wrapper opp-board-wrapper">
+                        <canvas id="opp-canvas-bg" class="board-layer"></canvas>
+                        <canvas id="opp-canvas-locked" class="board-layer"></canvas>
+                        <canvas id="opp-canvas-active" class="board-layer"></canvas>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <!-- Mobile Touch Controls -->

@@ -1,10 +1,11 @@
 import {
     COLS,
     VISIBLE_ROWS,
-    COLORS,
+    THEMES,
     ID_TO_PIECE,
     PIECE_SHAPES,
-    LINE_CLEAR_DURATION_FRAMES,
+    LOCK_DELAY_FRAMES,
+    MAX_LOCK_RESETS,
     GAME_STATES
 } from './constants.js';
 import { ParticleSystem } from './particles.js';
@@ -26,12 +27,34 @@ export class Renderer {
         this.cellSize = 30;
         this.dpr = 2; // 2x retina buffer
         this.colorblind = false;
+        this.theme = THEMES.cyberpunk;
         this.patterns = new Map();
         this.particles = new ParticleSystem();
+        this.hardDropTrails = [];
         this.burstSpawnedForClear = false;
 
         this.resize(this.cellSize);
         this.initPatterns();
+    }
+
+    setTheme(themeKey) {
+        this.theme = THEMES[themeKey] || THEMES.cyberpunk;
+        this.drawBackground();
+    }
+
+    getPieceColor(type) {
+        if (type === 'GARBAGE') return this.theme.garbage;
+        return this.theme.pieces[type] || this.theme.accent;
+    }
+
+    addHardDropTrail({ blocks, type, distance }) {
+        if (!blocks || distance <= 0) return;
+        this.hardDropTrails.push({
+            blocks,
+            color: this.getPieceColor(type),
+            life: 12,
+            maxLife: 12
+        });
     }
 
     setColorblind(enabled) {
@@ -123,10 +146,10 @@ export class Renderer {
         const w = COLS * this.cellSize;
         const h = VISIBLE_ROWS * this.cellSize;
 
-        ctx.fillStyle = COLORS.background;
+        ctx.fillStyle = this.theme.background;
         ctx.fillRect(0, 0, w, h);
 
-        ctx.strokeStyle = COLORS.grid;
+        ctx.strokeStyle = this.theme.grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let c = 1; c < COLS; c++) {
@@ -171,7 +194,7 @@ export class Renderer {
         const py = (VISIBLE_ROWS - 1 - by) * cs;
         const pad = 1.5;
         const size = cs - pad * 2;
-        const color = flash ? '#ffffff' : COLORS.pieces[type];
+        const color = flash ? '#ffffff' : this.getPieceColor(type);
 
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -224,6 +247,45 @@ export class Renderer {
         const h = VISIBLE_ROWS * this.cellSize;
         ctx.clearRect(0, 0, w, h);
 
+        // Danger vignette when stack height >= 16
+        const stackHeight = engine.board.getStackHeight();
+        if (
+            stackHeight >= 16 &&
+            (engine.state === GAME_STATES.PLAYING || engine.state === GAME_STATES.LINE_CLEARING)
+        ) {
+            const pulse = 0.25 + 0.25 * Math.sin((timestamp / 1000) * Math.PI * 6);
+            ctx.save();
+            ctx.strokeStyle = this.theme.danger;
+            ctx.globalAlpha = pulse;
+            ctx.lineWidth = 6;
+            ctx.strokeRect(3, 3, w - 6, h - 6);
+            ctx.restore();
+        }
+
+        // Hard-drop laser trails
+        for (let i = this.hardDropTrails.length - 1; i >= 0; i--) {
+            const trail = this.hardDropTrails[i];
+            const alpha = (trail.life / trail.maxLife) * 0.32;
+            ctx.save();
+            for (const b of trail.blocks) {
+                if (b.endY >= VISIBLE_ROWS) continue;
+                const px = b.x * this.cellSize + 2;
+                const topY = Math.max(0, (VISIBLE_ROWS - 1 - b.y) * this.cellSize);
+                const botY = (VISIBLE_ROWS - b.endY) * this.cellSize;
+                const grad = ctx.createLinearGradient(0, topY, 0, botY);
+                grad.addColorStop(0, 'rgba(255,255,255,0)');
+                grad.addColorStop(1, trail.color);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = grad;
+                ctx.fillRect(px, topY, this.cellSize - 4, Math.max(0, botY - topY));
+            }
+            ctx.restore();
+            trail.life--;
+            if (trail.life <= 0) {
+                this.hardDropTrails.splice(i, 1);
+            }
+        }
+
         // Ghost & Active Piece
         if (
             engine.activePiece &&
@@ -256,11 +318,27 @@ export class Renderer {
                     this.drawBlock(ctx, bx, by, piece.type, { alpha: pulse, glow: 14 });
                 }
             }
+
+            // Lock-delay glow bar when grounded
+            if (engine.isGrounded && engine.state === GAME_STATES.PLAYING) {
+                const remain = Math.max(0, 1 - engine.lockTimer / LOCK_DELAY_FRAMES);
+                const resetsLeft = Math.max(0, MAX_LOCK_RESETS - engine.lockResets);
+                const barW = w * 0.45;
+                const barX = (w - barW) / 2;
+                const barY = h - 8;
+                ctx.save();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.fillRect(barX, barY, barW, 4);
+                ctx.fillStyle = resetsLeft <= 3 ? this.theme.danger : this.theme.accent;
+                ctx.fillRect(barX, barY, barW * remain, 4);
+                ctx.restore();
+            }
         }
 
         // Line clear flash animation
         if (engine.state === GAME_STATES.LINE_CLEARING && engine.pendingClearRows.length > 0) {
-            const progress = engine.lineClearTimer / LINE_CLEAR_DURATION_FRAMES;
+            const totalClear = Math.max(1, engine.lineClearFrames);
+            const progress = engine.lineClearTimer / totalClear;
             if (progress < 0.4) {
                 // Flash white
                 const flashAlpha = 0.6 + 0.4 * Math.sin(progress * Math.PI * 10);
@@ -270,7 +348,7 @@ export class Renderer {
                     ctx.save();
                     ctx.globalAlpha = flashAlpha;
                     ctx.fillStyle = '#ffffff';
-                    ctx.shadowColor = '#00fff7';
+                    ctx.shadowColor = this.theme.accent;
                     ctx.shadowBlur = 16;
                     ctx.fillRect(0, py, w, this.cellSize);
                     ctx.restore();
@@ -285,7 +363,7 @@ export class Renderer {
                     for (let x = 0; x < COLS; x++) {
                         const id = engine.board.grid[row][x];
                         const type = ID_TO_PIECE[id] || 'I';
-                        rowColors.push(COLORS.pieces[type]);
+                        rowColors.push(this.getPieceColor(type));
                     }
                     this.particles.spawnRowBurst(py, COLS, this.cellSize, rowColors);
                 }
@@ -322,7 +400,7 @@ export class Renderer {
         const cell = Math.min(w / 5, h / 3.5);
         const offsetX = (w - spanX * cell) / 2;
         const offsetY = (h - spanY * cell) / 2;
-        const color = COLORS.pieces[type];
+        const color = this.getPieceColor(type);
 
         ctx.save();
         ctx.shadowColor = color;

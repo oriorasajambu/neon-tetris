@@ -18,7 +18,13 @@ export default [
                 FileReader: "readonly",
                 alert: "readonly",
                 confirm: "readonly",
-                structuredClone: "readonly"
+                structuredClone: "readonly",
+                Worker: "readonly",
+                self: "readonly",
+                setInterval: "readonly",
+                clearInterval: "readonly",
+                setTimeout: "readonly",
+                clearTimeout: "readonly"
             }
         },
         rules: {

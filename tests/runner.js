@@ -3,13 +3,17 @@ import { runPiecesTests } from './pieces.test.js';
 import { runScoringTests } from './scoring.test.js';
 import { runRngTests } from './rng.test.js';
 import { runReplayTests } from './replay.test.js';
+import { runCompetitiveTests } from './competitive.test.js';
+import { runGarbageAndAiTests } from './garbage-ai.test.js';
 
 const suites = [
     ['Board', runBoardTests],
     ['Pieces & SRS', runPiecesTests],
     ['Scoring & T-Spin', runScoringTests],
     ['PRNG Determinism', runRngTests],
-    ['Replay Determinism', runReplayTests]
+    ['Replay Determinism', runReplayTests],
+    ['Competitive Modes & Mechanics', runCompetitiveTests],
+    ['Garbage & AI Core', runGarbageAndAiTests]
 ];
 
 let failed = 0;

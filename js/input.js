@@ -112,6 +112,9 @@ export class InputHandler {
             case 'rotateCCW':
                 this.onAction(ACTIONS.ROTATE_CCW);
                 break;
+            case 'rotate180':
+                this.onAction(ACTIONS.ROTATE_180);
+                break;
             case 'hold':
                 this.onAction(ACTIONS.HOLD);
                 break;
@@ -143,7 +146,7 @@ export class InputHandler {
             }
         } else if (action === 'softDrop') {
             this.heldDirections.softDrop = false;
-            this.onAction(ACTIONS.SOFT_DROP, false);
+            this.onAction(ACTIONS.SOFT_DROP_END, false);
         }
     }
 
@@ -160,10 +163,11 @@ export class InputHandler {
         }
 
         if (this.arr === 0) {
-            // Instant wall slide (0 ARR)
-            for (let i = 0; i < 10; i++) {
-                this.onAction(actionId);
-            }
+            // Instant wall slide (0 ARR) in 1 logical action
+            const snapAction = this.activeHorizDir === 'left'
+                ? ACTIONS.WALL_SNAP_LEFT
+                : ACTIONS.WALL_SNAP_RIGHT;
+            this.onAction(snapAction);
             return;
         }
 

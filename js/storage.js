@@ -2,14 +2,15 @@ import { DEFAULT_SETTINGS } from './constants.js';
 
 const KEYS = {
     HIGHSCORES: 'tetris_highscores',
+    MODE_RECORDS: 'tetris_mode_records',
     SETTINGS: 'tetris_settings',
     STATS: 'tetris_stats',
     REPLAY_META: 'tetris_replay_meta',
     REPLAY_PREFIX: 'tetris_replay_'
 };
 
-const MAX_REPLAYS = 5;
-const TOTAL_BUDGET_BYTES = 500 * 1024;
+const MAX_REPLAYS = 20;
+const TOTAL_BUDGET_BYTES = 4.5 * 1024 * 1024;
 
 function safeGet(key, fallback) {
     try {
@@ -89,6 +90,41 @@ export class StorageManager {
         return stats;
     }
 
+    loadModeRecords() {
+        return safeGet(KEYS.MODE_RECORDS, {
+            sprintBestMs: null,
+            ultraBestScore: 0,
+            cheeseBestMs: null,
+            vsAiWins: 0
+        });
+    }
+
+    recordModeResult(summary) {
+        const records = this.loadModeRecords();
+        let isNewBest = false;
+        if (summary.mode === 'sprint' && summary.victory) {
+            if (records.sprintBestMs === null || summary.timeMs < records.sprintBestMs) {
+                records.sprintBestMs = summary.timeMs;
+                isNewBest = true;
+            }
+        } else if (summary.mode === 'ultra') {
+            if (summary.score > records.ultraBestScore) {
+                records.ultraBestScore = summary.score;
+                isNewBest = true;
+            }
+        } else if (summary.mode === 'cheese' && summary.victory) {
+            if (records.cheeseBestMs === null || summary.timeMs < records.cheeseBestMs) {
+                records.cheeseBestMs = summary.timeMs;
+                isNewBest = true;
+            }
+        } else if (summary.mode === 'vs_ai' && summary.victory) {
+            records.vsAiWins += 1;
+            isNewBest = true;
+        }
+        safeSet(KEYS.MODE_RECORDS, records);
+        return { records, isNewBest };
+    }
+
     loadReplayMeta() {
         return safeGet(KEYS.REPLAY_META, []);
     }
@@ -137,8 +173,10 @@ export class StorageManager {
 
         meta.push({
             slot,
+            mode: replayData.mode || 'marathon',
             score: replayData.finalScore || 0,
             lines: replayData.lines || 0,
+            timeMs: replayData.timeMs || 0,
             date: replayData.date || new Date().toISOString()
         });
         safeSet(KEYS.REPLAY_META, meta);

@@ -23,7 +23,8 @@ export const PIECE_IDS = {
     S: 4,
     Z: 5,
     J: 6,
-    L: 7
+    L: 7,
+    GARBAGE: 8
 };
 
 export const ID_TO_PIECE = {
@@ -33,21 +34,86 @@ export const ID_TO_PIECE = {
     4: 'S',
     5: 'Z',
     6: 'J',
-    7: 'L'
+    7: 'L',
+    8: 'GARBAGE'
+};
+
+export const THEMES = {
+    cyberpunk: {
+        name: 'Neon Cyberpunk',
+        background: '#0a0a0f',
+        grid: '#0a2a2a',
+        accent: '#00fff7',
+        danger: '#ff073a',
+        garbage: '#555b6e',
+        pieces: {
+            I: '#00fff7',
+            O: '#ffe600',
+            T: '#ff00ff',
+            S: '#39ff14',
+            Z: '#ff073a',
+            J: '#0080ff',
+            L: '#ff6600'
+        }
+    },
+    synthwave: {
+        name: 'Synthwave Sunset',
+        background: '#120822',
+        grid: '#2b124c',
+        accent: '#ff2a85',
+        danger: '#ff3864',
+        garbage: '#4e4263',
+        pieces: {
+            I: '#00f5d4',
+            O: '#fee440',
+            T: '#f15bb5',
+            S: '#9b5de5',
+            Z: '#ff3864',
+            J: '#00bbf9',
+            L: '#ff9e00'
+        }
+    },
+    matrix: {
+        name: 'Matrix Terminal',
+        background: '#020b02',
+        grid: '#092609',
+        accent: '#00ff41',
+        danger: '#ff4500',
+        garbage: '#2a4a2a',
+        pieces: {
+            I: '#00ff41',
+            O: '#a8ff60',
+            T: '#39ff14',
+            S: '#00cc33',
+            Z: '#7fff00',
+            J: '#009922',
+            L: '#55ff77'
+        }
+    },
+    monochrome: {
+        name: 'High-Contrast Mono',
+        background: '#000000',
+        grid: '#262626',
+        accent: '#ffffff',
+        danger: '#ff3333',
+        garbage: '#666666',
+        pieces: {
+            I: '#ffffff',
+            O: '#e5e5e5',
+            T: '#cccccc',
+            S: '#b3b3b3',
+            Z: '#999999',
+            J: '#d9d9d9',
+            L: '#f2f2f2'
+        }
+    }
 };
 
 export const COLORS = {
-    background: '#0a0a0f',
-    grid: '#0a2a2a',
-    pieces: {
-        I: '#00fff7',
-        O: '#ffe600',
-        T: '#ff00ff',
-        S: '#39ff14',
-        Z: '#ff073a',
-        J: '#0080ff',
-        L: '#ff6600'
-    }
+    background: THEMES.cyberpunk.background,
+    grid: THEMES.cyberpunk.grid,
+    garbage: THEMES.cyberpunk.garbage,
+    pieces: { ...THEMES.cyberpunk.pieces }
 };
 
 // Rotation states: 0 = North (spawn), 1 = East (R), 2 = South (2), 3 = West (L)
@@ -133,6 +199,21 @@ export const I_KICKS = {
     '0>3': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
 };
 
+// 180-degree kick tables (+y = UP)
+export const JLSTZ_180_KICKS = {
+    '0>2': [[0, 0], [0, 1], [1, 1], [-1, 1], [1, 0], [-1, 0]],
+    '2>0': [[0, 0], [0, -1], [-1, -1], [1, -1], [-1, 0], [1, 0]],
+    '1>3': [[0, 0], [1, 0], [1, 2], [1, 1], [0, 2], [0, 1]],
+    '3>1': [[0, 0], [-1, 0], [-1, 2], [-1, 1], [0, 2], [0, 1]]
+};
+
+export const I_180_KICKS = {
+    '0>2': [[0, 0], [0, 1], [1, 1], [-1, 1], [1, 0], [-1, 0]],
+    '2>0': [[0, 0], [0, -1], [-1, -1], [1, -1], [-1, 0], [1, 0]],
+    '1>3': [[0, 0], [1, 0], [1, 2], [1, 1], [0, 2], [0, 1]],
+    '3>1': [[0, 0], [-1, 0], [-1, 2], [-1, 1], [0, 2], [0, 1]]
+};
+
 // Front corners of the T-piece 3x3 bounding box for each rotation state
 export const T_FRONT_CORNERS = {
     0: [[0, 2], [2, 2]],
@@ -161,8 +242,35 @@ export const ACTIONS = {
     HARD_DROP: 3,
     ROTATE_CW: 4,
     ROTATE_CCW: 5,
-    HOLD: 6
+    HOLD: 6,
+    ROTATE_180: 7,
+    SOFT_DROP_END: 8,
+    WALL_SNAP_LEFT: 9,
+    WALL_SNAP_RIGHT: 10
 };
+
+export const GAME_MODES = {
+    MARATHON: 'marathon',
+    SPRINT: 'sprint',
+    ULTRA: 'ultra',
+    CHEESE: 'cheese',
+    ZEN: 'zen',
+    VS_AI: 'vs_ai'
+};
+
+export const AI_TIERS = {
+    chill: { label: 'Chill', pps: 0.8, depth: 1, mistakeRate: 0.18 },
+    rival: { label: 'Rival', pps: 1.8, depth: 2, mistakeRate: 0.05 },
+    cybernetic: { label: 'Cybernetic', pps: 3.5, depth: 2, mistakeRate: 0 }
+};
+
+export const COMBO_ATTACK_TABLE = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5];
+export const MAX_GARBAGE_PER_LOCK = 8;
+export const SPRINT_TARGET_LINES = 40;
+export const ULTRA_DURATION_FRAMES = 7200; // 2 minutes at 60fps
+export const CHEESE_TARGET_LINES = 18;
+export const CHEESE_MIN_ROWS = 8;
+export const CHEESE_INITIAL_ROWS = 10;
 
 export const DEFAULT_KEYBINDINGS = {
     left: ['ArrowLeft', 'KeyA'],
@@ -171,6 +279,7 @@ export const DEFAULT_KEYBINDINGS = {
     hardDrop: ['Space'],
     rotateCW: ['ArrowUp', 'KeyX'],
     rotateCCW: ['KeyZ'],
+    rotate180: ['KeyQ'],
     hold: ['KeyC', 'ShiftLeft', 'ShiftRight'],
     pause: ['KeyP', 'Escape'],
     mute: ['KeyM']
@@ -179,9 +288,15 @@ export const DEFAULT_KEYBINDINGS = {
 export const DEFAULT_SETTINGS = {
     das: 133,
     arr: 10,
+    sdf: 20, // 1..20 or 999 for infinite
+    areFrames: 0,
+    lineClearFrames: 24,
     volume: 70,
+    musicEnabled: true,
+    musicVolume: 45,
     muted: false,
     colorblind: false,
+    theme: 'cyberpunk',
     nextCount: 5,
     keybindings: structuredClone(DEFAULT_KEYBINDINGS)
 };
@@ -193,5 +308,6 @@ export const GAME_STATES = {
     COUNTDOWN: 'COUNTDOWN',
     LINE_CLEARING: 'LINE_CLEARING',
     GAME_OVER: 'GAME_OVER',
+    VICTORY: 'VICTORY',
     REPLAY: 'REPLAY'
 };

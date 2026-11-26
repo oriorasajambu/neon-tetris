@@ -138,4 +138,84 @@ export class Board {
         }
         return ghostY;
     }
+
+    /**
+     * Pushes `count` garbage rows onto the bottom of the board, each with `holeColumn` empty.
+     * @returns {{ toppedOut: boolean }} True if any non-empty cells were pushed out of bounds
+     */
+    addGarbageLines(count, holeColumn) {
+        if (count <= 0) return { toppedOut: false };
+        let toppedOut = false;
+
+        for (let y = this.rows - count; y < this.rows; y++) {
+            if (y >= 0) {
+                for (let x = 0; x < this.cols; x++) {
+                    if (this.grid[y][x] !== 0) {
+                        toppedOut = true;
+                        break;
+                    }
+                }
+            }
+            if (toppedOut) break;
+        }
+
+        const newGrid = [];
+        for (let i = 0; i < count; i++) {
+            const row = new Uint8Array(this.cols);
+            row.fill(PIECE_IDS.GARBAGE);
+            const col = Array.isArray(holeColumn) ? holeColumn[i] : holeColumn;
+            if (col >= 0 && col < this.cols) {
+                row[col] = 0;
+            }
+            newGrid.push(row);
+        }
+
+        for (let y = 0; y < this.rows - count; y++) {
+            newGrid.push(this.grid[y]);
+        }
+
+        this.grid = newGrid;
+        return { toppedOut };
+    }
+
+    /**
+     * Counts how many rows currently contain at least one garbage cell.
+     */
+    countGarbageRows() {
+        let count = 0;
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                if (this.grid[y][x] === PIECE_IDS.GARBAGE) {
+                    count++;
+                    break;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Returns the highest occupied row index + 1 (0 if board is empty).
+     */
+    getStackHeight() {
+        for (let y = this.rows - 1; y >= 0; y--) {
+            for (let x = 0; x < this.cols; x++) {
+                if (this.grid[y][x] !== 0) {
+                    return y + 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Returns a flat Uint8Array copy of the grid for worker/AI evaluation.
+     */
+    cloneFlatGrid() {
+        const flat = new Uint8Array(this.rows * this.cols);
+        for (let y = 0; y < this.rows; y++) {
+            flat.set(this.grid[y], y * this.cols);
+        }
+        return flat;
+    }
 }

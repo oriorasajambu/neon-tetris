@@ -52,4 +52,46 @@ export function runReplayTests() {
         engine1.board.grid.map((r) => Array.from(r)),
         'Replay board state must match original deterministically'
     );
+
+    // Replay v2: Soft-drop press/release + ROTATE_180 + WALL_SNAP determinism
+    const e3 = new GameEngine();
+    const rec2 = new ReplayRecorder(98765, { mode: 'marathon', tuning: { sdf: 10 } });
+    e3.startNewGame(98765, { mode: 'marathon', sdf: 10 });
+    const v2Script = [
+        [1, ACTIONS.SOFT_DROP],
+        [4, ACTIONS.ROTATE_180],
+        [7, ACTIONS.SOFT_DROP_END],
+        [9, ACTIONS.WALL_SNAP_LEFT],
+        [12, ACTIONS.HARD_DROP]
+    ];
+    let v2Idx = 0;
+    for (let f = 0; f < 25; f++) {
+        while (v2Idx < v2Script.length && v2Script[v2Idx][0] <= e3.frameCount) {
+            const act = v2Script[v2Idx][1];
+            rec2.record(e3.frameCount, act);
+            if (act === ACTIONS.SOFT_DROP) e3.softDropping = true;
+            else if (act === ACTIONS.SOFT_DROP_END) e3.softDropping = false;
+            else if (act === ACTIONS.ROTATE_180) e3.rotate(2);
+            else if (act === ACTIONS.WALL_SNAP_LEFT) e3.wallSnap(-1);
+            else if (act === ACTIONS.HARD_DROP) e3.hardDrop();
+            v2Idx++;
+        }
+        e3.stepFrame();
+    }
+
+    const savedV2 = rec2.serialize({ finalScore: e3.score, lines: e3.lines });
+    assert.equal(savedV2.version, 2);
+
+    const e4 = new GameEngine();
+    const player2 = new ReplayPlayer(e4, savedV2);
+    player2.start();
+    for (let f = 0; f < 25; f++) {
+        player2.step();
+    }
+    assert.equal(e4.softDropping, false, 'Soft drop release must be replayed deterministically');
+    assert.equal(e4.score, e3.score);
+    assert.deepEqual(
+        e4.board.grid.map((r) => Array.from(r)),
+        e3.board.grid.map((r) => Array.from(r))
+    );
 }

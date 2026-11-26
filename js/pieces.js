@@ -3,7 +3,9 @@ import {
     PIECE_SHAPES,
     SPAWN_POSITIONS,
     JLSTZ_KICKS,
-    I_KICKS
+    I_KICKS,
+    JLSTZ_180_KICKS,
+    I_180_KICKS
 } from './constants.js';
 
 /**
@@ -39,6 +41,17 @@ export class Tetromino {
         }
         const key = `${this.rotation}>${targetRotation}`;
         return this.type === 'I' ? I_KICKS[key] : JLSTZ_KICKS[key];
+    }
+
+    /**
+     * Returns 180-degree rotation kick offsets.
+     */
+    getKicks180(targetRotation) {
+        if (this.type === 'O') {
+            return [[0, 0]];
+        }
+        const key = `${this.rotation}>${targetRotation}`;
+        return this.type === 'I' ? I_180_KICKS[key] : JLSTZ_180_KICKS[key];
     }
 
     clone() {
