@@ -1,0 +1,13 @@
+{
+  "name": "neon-tetris",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/runner.js",
+    "lint": "eslint js/"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  }
+}

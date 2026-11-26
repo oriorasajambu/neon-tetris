@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEON TETRIS</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="game-shell">
+        <header class="top-bar">
+            <span class="brand-mini">NEON TETRIS</span>
+            <div class="top-actions">
+                <button id="btn-hud-mute" class="icon-btn" title="Mute (M)">🔊</button>
+                <button id="btn-hud-pause" class="icon-btn" title="Pause (P)">⏸</button>
+            </div>
+        </header>
+
+        <main class="play-layout">
+            <!-- Left Panel: Hold + Stats -->
+            <aside class="side-panel left-panel">
+                <div class="panel-box">
+                    <div class="panel-title">HOLD</div>
+                    <canvas id="hold-canvas" width="96" height="64" class="preview-canvas"></canvas>
+                </div>
+                <div class="panel-box stat-box">
+                    <div class="stat-item">
+                        <span class="panel-title">SCORE</span>
+                        <span id="hud-score" class="stat-val">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="panel-title">LEVEL</span>
+                        <span id="hud-level" class="stat-val">1</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="panel-title">LINES</span>
+                        <span id="hud-lines" class="stat-val">0</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Playfield: 3-Layer Canvas Stack -->
+            <section class="board-stage">
+                <div id="board-wrapper" class="board-wrapper">
+                    <canvas id="canvas-bg" class="board-layer"></canvas>
+                    <canvas id="canvas-locked" class="board-layer"></canvas>
+                    <canvas id="canvas-active" class="board-layer"></canvas>
+
+                    <!-- Overlays -->
+                    <div id="overlay-menu" class="overlay">
+                        <div class="overlay-top-icons">
+                            <button id="btn-open-stats" class="icon-btn" title="Stats & Replays">🏆</button>
+                            <button id="btn-open-settings" class="icon-btn" title="Settings">⚙️</button>
+                        </div>
+                        <h1 class="neon-title">NEON<br>TETRIS</h1>
+                        <div class="high-score-banner">
+                            <span>HIGH SCORE</span>
+                            <strong id="menu-highscore">0</strong>
+                        </div>
+                        <button id="btn-start" class="btn-primary pulse-btn">PRESS START</button>
+                        <p class="hint-text">Arrows / WASD • Space Hard Drop • Z/X Rotate • C Hold</p>
+                    </div>
+
+                    <div id="overlay-pause" class="overlay hidden">
+                        <h2 class="overlay-heading">PAUSED</h2>
+                        <div class="menu-stack">
+                            <button id="btn-resume" class="btn-primary">RESUME</button>
+                            <button id="btn-pause-restart" class="btn-secondary">RESTART</button>
+                            <button id="btn-pause-settings" class="btn-secondary">SETTINGS</button>
+                            <button id="btn-pause-quit" class="btn-secondary">QUIT TO MENU</button>
+                        </div>
+                    </div>
+
+                    <div id="overlay-countdown" class="overlay hidden">
+                        <div id="countdown-text" class="countdown-num">3</div>
+                    </div>
+
+                    <div id="overlay-gameover" class="overlay hidden">
+                        <h2 class="overlay-heading danger">GAME OVER</h2>
+                        <div id="go-newhigh" class="new-high hidden">NEW HIGH SCORE!</div>
+                        <div class="go-stats">
+                            <div><span>SCORE</span><strong id="go-score">0</strong></div>
+                            <div><span>LEVEL</span><strong id="go-level">1</strong></div>
+                            <div><span>LINES</span><strong id="go-lines">0</strong></div>
+                        </div>
+                        <div class="menu-stack">
+                            <button id="btn-save-replay" class="btn-secondary">Save Replay</button>
+                            <button id="btn-gameover-restart" class="btn-primary">PLAY AGAIN</button>
+                            <button id="btn-gameover-menu" class="btn-secondary">MAIN MENU</button>
+                        </div>
+                    </div>
+
+                    <div id="overlay-settings" class="overlay scrollable hidden">
+                        <div class="overlay-header">
+                            <h3>SETTINGS</h3>
+                            <button id="btn-settings-back" class="btn-small">Back</button>
+                        </div>
+                        <div class="settings-section">
+                            <label>DAS (Auto-Shift Delay): <span id="setting-das-val">133 ms</span>
+                                <input id="setting-das" type="range" min="0" max="300" step="1">
+                            </label>
+                            <label>ARR (Repeat Rate): <span id="setting-arr-val">10 ms</span>
+                                <input id="setting-arr" type="range" min="0" max="300" step="1">
+                            </label>
+                            <label>Volume: <span id="setting-volume-val">70%</span>
+                                <input id="setting-volume" type="range" min="0" max="100" step="1">
+                            </label>
+                            <label class="toggle-row">
+                                <span>Mute Audio</span>
+                                <input id="setting-muted" type="checkbox">
+                            </label>
+                            <label class="toggle-row">
+                                <span>Colorblind Patterns</span>
+                                <input id="setting-colorblind" type="checkbox">
+                            </label>
+                            <label class="toggle-row">
+                                <span>Next Pieces</span>
+                                <select id="setting-next-count">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="settings-section">
+                            <div class="section-head">
+                                <h4>KEYBINDINGS</h4>
+                                <button id="btn-reset-keys" class="btn-small">Reset</button>
+                            </div>
+                            <div id="keybind-list" class="keybind-list"></div>
+                        </div>
+                        <div class="settings-section data-actions">
+                            <button id="btn-export-data" class="btn-small">Export JSON</button>
+                            <button id="btn-import-data" class="btn-small">Import JSON</button>
+                            <button id="btn-clear-data" class="btn-small danger-btn">Clear Data</button>
+                            <input id="import-file-input" type="file" accept="application/json" class="hidden">
+                        </div>
+                    </div>
+
+                    <div id="overlay-stats" class="overlay scrollable hidden">
+                        <div class="overlay-header">
+                            <h3>STATS & REPLAYS</h3>
+                            <button id="btn-stats-back" class="btn-small">Back</button>
+                        </div>
+                        <div class="stats-grid">
+                            <div><span>Games</span><strong id="stat-games">0</strong></div>
+                            <div><span>Lines</span><strong id="stat-lines">0</strong></div>
+                            <div><span>T-Spins</span><strong id="stat-tspins">0</strong></div>
+                            <div><span>Best</span><strong id="stat-best">0</strong></div>
+                            <div><span>Time</span><strong id="stat-time">0m 0s</strong></div>
+                        </div>
+                        <h4>TOP 10 HIGH SCORES</h4>
+                        <div id="highscore-list" class="hs-list"></div>
+                        <h4>SAVED REPLAYS</h4>
+                        <div id="replay-list" class="replay-list"></div>
+                    </div>
+                </div>
+
+                <!-- Replay Playback Bar -->
+                <div id="replay-bar" class="replay-bar hidden">
+                    <span>REPLAY</span>
+                    <button id="btn-replay-toggle" class="btn-small">Pause</button>
+                    <button id="btn-replay-speed" class="btn-small">1x</button>
+                    <button id="btn-replay-exit" class="btn-small">Exit</button>
+                </div>
+            </section>
+
+            <!-- Right Panel: Next Queue -->
+            <aside class="side-panel right-panel">
+                <div class="panel-box">
+                    <div class="panel-title">NEXT</div>
+                    <div id="next-queue" class="next-queue"></div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Mobile Touch Controls -->
+        <footer id="touch-controls" class="touch-controls">
+            <div class="touch-dpad">
+                <button class="touch-btn" data-action="left" aria-label="Move Left">◀</button>
+                <button class="touch-btn" data-action="softDrop" aria-label="Soft Drop">▼</button>
+                <button class="touch-btn" data-action="right" aria-label="Move Right">▶</button>
+            </div>
+            <div class="touch-actions">
+                <button class="touch-btn" data-action="rotateCCW" aria-label="Rotate CCW">⟲</button>
+                <button class="touch-btn" data-action="rotateCW" aria-label="Rotate CW">⟳</button>
+                <button class="touch-btn" data-action="hold" aria-label="Hold">HOLD</button>
+                <button class="touch-btn hard-drop-btn" data-action="hardDrop" aria-label="Hard Drop">DROP</button>
+            </div>
+        </footer>
+    </div>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
