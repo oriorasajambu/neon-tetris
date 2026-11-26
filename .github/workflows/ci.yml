@@ -186,7 +186,7 @@ jobs:
 
           echo "code_changed=$code_changed" >> "$GITHUB_OUTPUT"
           if [[ "$code_changed" == "true" ]]; then
-            echo "Code/config paths changed; lint, tests, and Pages packaging will run."
+            echo "Code/config paths changed; lint and tests will run, with Pages packaging limited to main pushes."
           else
             echo "Docs-only change; heavy checks and deployment will be skipped."
           fi
@@ -229,8 +229,10 @@ jobs:
           cp -R js/. "$site_dir/js/"
 
       - uses: actions/configure-pages@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: ${{ runner.temp }}/site
 
@@ -265,7 +267,7 @@ jobs:
           fi
 
           if [[ "$CODE_CHANGED" == "true" && "$TEST_RESULT" != "success" ]]; then
-            echo "::error title=Required check failed::Code/config checks and Pages packaging must pass."
+            echo "::error title=Required check failed::Code/config checks must pass."
             exit 1
           fi
 
